@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Multi-User Secure Diary</title>
+<style>
+    body { font-family: Arial; padding: 20px; max-width: 500px; margin: auto; }
+    .page { display: none; }
+    button { padding: 10px; margin-top: 10px; width: 100%; }
+    input, textarea { width: 100%; padding: 10px; margin-top: 10px; }
+    .entry-item {
+        padding: 10px;
+        background: #ececec;
+        margin: 5px 0;
+        cursor: pointer;
+        border-radius: 5px;
+    }
+</style>
+</head>
+<body>
+
+<h2>🔐 Multi-User Secure Diary</h2>
+
+<!-- ========== REGISTER PAGE ========== -->
+<div id="registerPage" class="page">
+    <h3>Register New User</h3>
+    <input id="regUser" placeholder="Username">
+    <input id="regPass" type="password" placeholder="Password">
+    <input id="regQ" placeholder="Security Question (Example: Your pet name?)">
+    <input id="regA" placeholder="Security Answer">
+    <button onclick="registerUser()">Register</button>
+    <button onclick="show('loginPage')">Go to Login</button>
+</div>
+
+<!-- ========== LOGIN PAGE ========== -->
+<div id="loginPage" class="page">
+    <h3>User Login</h3>
+    <input id="loginUser" placeholder="Username">
+    <input id="loginPass" type="password" placeholder="Password">
+    <button onclick="loginUser()">Login</button>
+    <button onclick="show('registerPage')">Register</button>
+    <button onclick="show('forgotPage')">Forgot Password?</button>
+</div>
+
+<!-- ========== FORGOT PASSWORD PAGE ========== -->
+<div id="forgotPage" class="page">
+    <h3>Forgot Password</h3>
+    <input id="fpUser" placeholder="Enter Username">
+    <button onclick="loadSecurityQuestion()">Next</button>
+    <button onclick="show('loginPage')">Back</button>
+</div>
+
+<!-- ========== ANSWER SECURITY QUESTION PAGE ========== -->
+<div id="answerPage" class="page">
+    <h3 id="secQ">Security Question:</h3>
+    <input id="secA" placeholder="Your Answer">
+    <button onclick="checkSecurityAnswer()">Submit</button>
+</div>
+
+<!-- ========== RESET PASSWORD PAGE ========== -->
+<div id="resetPage" class="page">
+    <h3>Reset Your Password</h3>
+    <input id="newPass" type="password" placeholder="New Password">
+    <button onclick="resetPassword()">Save Password</button>
+</div>
+
+<!-- ========== CREATE ENTRY PAGE ========== -->
+<div id="createPage" class="page">
+    <h3>Create Diary Entry</h3>
+    <textarea id="newEntry" rows="7" placeholder="Write here..."></textarea>
+    <button onclick="saveEntry()">Save Entry</button>
+    <button onclick="goToSearch()">View Your Entries</button>
+    <button onclick="logout()">Logout</button>
+</div>
+
+<!-- ========== SEARCH PAGE ========== -->
+<div id="searchPage" class="page">
+    <h3>Your Entries</h3>
+    <div id="entryList"></div>
+    <button onclick="goToCreate()">Create New Entry</button>
+    <button onclick="logout()">Logout</button>
+</div>
+
+<!-- ========== PASSWORD VERIFICATION FOR EDIT ========== -->
+<div id="passwordPage" class="page">
+    <h3>Enter Your Password to Edit</h3>
+    <input id="entryPassword" type="password" placeholder="Password">
+    <button onclick="verifyEntryPassword()">Continue</button>
+</div>
+
+<!-- ========== EDIT PAGE ========== -->
+<div id="editPage" class="page">
+    <h3>Edit Entry</h3>
+    <textarea id="editText" rows="7"></textarea>
+    <button onclick="updateEntry()">Save Changes</button>
+    <button onclick="deleteEntry()" style="background:red;color:white;">Delete Entry</button>
+</div>
+
+<script>
+// GLOBAL VARIABLES
+let currentUser = "";
+let selectedEntryIndex = null;
+let fpUser = ""; // Forgot password user
+
+function show(id) {
+    document.querySelectorAll(".page").forEach(p => p.style.display = "none");
+    document.getElementById(id).style.display = "block";
+}
+
+show("loginPage");
+
+/* ====================== REGISTER ====================== */
+function registerUser() {
+    let user = document.getElementById("regUser").value.trim();
+    let pass = document.getElementById("regPass").value;
+    let q = document.getElementById("regQ").value.trim();
+    let a = document.getElementById("regA").value.trim();
+
+    if (!user || !pass || !q || !a) {
+        alert("All fields required!");
+        return;
+    }
+
+    let users = JSON.parse(localStorage.getItem("users") || "{}");
+
+    if (users[user]) {
+        alert("Username already exists!");
+        return;
+    }
+
+    users[user] = {
+        password: pass,
+        question: q,
+        answer: a.toLowerCase(),
+        entries: []
+    };
+
+    localStorage.setItem("users", JSON.stringify(users));
+
+    alert("User registered!");
+    show("loginPage");
+}
+
+/* ====================== LOGIN ====================== */
+function loginUser() {
+    let user = document.getElementById("loginUser").value.trim();
+    let pass = document.getElementById("loginPass").value;
+
+    let users = JSON.parse(localStorage.getItem("users") || "{}");
+
+    if (!users[user]) return alert("User not found!");
+
+    if (users[user].password !== pass) return alert("Wrong password!");
+
+    currentUser = user;
+    show("createPage");
+}
+
+/* ====================== FORGOT PASSWORD ====================== */
+function loadSecurityQuestion() {
+    fpUser = document.getElementById("fpUser").value.trim();
+
+    let users = JSON.parse(localStorage.getItem("users") || "{}");
+
+    if (!users[fpUser]) {
+        alert("User not found!");
+        return;
+    }
+
+    document.getElementById("secQ").innerText = users[fpUser].question;
+    show("answerPage");
+}
+
+function checkSecurityAnswer() {
+    let ans = document.getElementById("secA").value.trim().toLowerCase();
+    let users = JSON.parse(localStorage.getItem("users") || "{}");
+
+    if (ans !== users[fpUser].answer) {
+        alert("Incorrect answer!");
+        return;
+    }
+
+    show("resetPage");
+}
+
+function resetPassword() {
+    let newP = document.getElementById("newPass").value;
+    let users = JSON.parse(localStorage.getItem("users") || "{}");
+
+    users[fpUser].password = newP;
+    localStorage.setItem("users", JSON.stringify(users));
+
+    alert("Password updated!");
+    show("loginPage");
+}
+
+/* ====================== CREATE ENTRY ====================== */
+function saveEntry() {
+    let text = document.getElementById("newEntry").value.trim();
+    if (!text) return alert("Cannot save empty entry!");
+
+    let users = JSON.parse(localStorage.getItem("users") || "{}");
+
+    users[currentUser].entries.push({
+        content: btoa(text),
+        time: new Date().toLocaleString()
+    });
+
+    localStorage.setItem("users", JSON.stringify(users));
+
+    document.getElementById("newEntry").value = "";
+    alert("Entry saved!");
+}
+
+/* ====================== VIEW ENTRIES ====================== */
+function goToSearch() {
+    let users = JSON.parse(localStorage.getItem("users") || "{}");
+    let entryList = document.getElementById("entryList");
+    entryList.innerHTML = "";
+
+    let entries = users[currentUser].entries;
+
+    if (entries.length === 0) {
+        entryList.innerHTML = "<p>No entries yet.</p>";
+    }
+
+    entries.forEach((e, i) => {
+        let div = document.createElement("div");
+        div.className = "entry-item";
+        div.innerText = "Entry " + (i + 1) + " • " + e.time;
+        div.onclick = () => {
+            selectedEntryIndex = i;
+            show("passwordPage");
+        };
+        entryList.appendChild(div);
+    });
+
+    show("searchPage");
+}
+
+function goToCreate() { show("createPage"); }
+
+/* ====================== PASSWORD VERIFY FOR EDIT ====================== */
+function verifyEntryPassword() {
+    let pass = document.getElementById("entryPassword").value;
+    let users = JSON.parse(localStorage.getItem("users") || "{}");
+
+    if (pass !== users[currentUser].password) {
+        alert("Incorrect Password!");
+        return;
+    }
+
+    loadEntry();
+    show("editPage");
+}
+
+function loadEntry() {
+    let users = JSON.parse(localStorage.getItem("users") || "{}");
+    let entry = users[currentUser].entries[selectedEntryIndex];
+
+    document.getElementById("editText").value = atob(entry.content);
+}
+
+/* ====================== UPDATE ENTRY ====================== */
+function updateEntry() {
+    let users = JSON.parse(localStorage.getItem("users") || "{}");
+
+    users[currentUser].entries[selectedEntryIndex].content =
+        btoa(document.getElementById("editText").value);
+
+    localStorage.setItem("users", JSON.stringify(users));
+
+    alert("Entry updated!");
+    goToSearch();
+}
+
+/* ====================== DELETE ENTRY ====================== */
+function deleteEntry() {
+    if (!confirm("Delete permanently?")) return;
+
+    let users = JSON.parse(localStorage.getItem("users") || "{}");
+
+    users[currentUser].entries.splice(selectedEntryIndex, 1);
+
+    localStorage.setItem("users", JSON.stringify(users));
+
+    alert("Entry deleted!");
+    goToSearch();
+}
+
+/* ====================== LOGOUT ====================== */
+function logout() {
+    currentUser = "";
+    show("loginPage");
+}
+</script>
+
+</body>
+</html>
