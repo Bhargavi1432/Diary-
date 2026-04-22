@@ -33,6 +33,8 @@ interface SimRow {
 /* =========================
    Constants
 ========================= */
+const STORAGE_KEY = "simData";
+
 const EMPTY_ROW: Omit<SimRow, "id" | "currentDate"> = {
   subscriptionId: "",
   msisdn: "",
@@ -46,20 +48,18 @@ const EMPTY_ROW: Omit<SimRow, "id" | "currentDate"> = {
   status: "",
 };
 
-const STORAGE_KEY = "simData";
-
 /* =========================
-   Utilities
+   Utils
 ========================= */
-const toEpoch = (value: string): Epoch =>
-  value ? new Date(value).getTime() : "";
+const toEpoch = (val: string): Epoch =>
+  val ? new Date(val).getTime() : "";
 
-const toDateTimeLocal = (value: Epoch): string =>
-  value ? new Date(value).toISOString().slice(0, 16) : "";
+const toInputDate = (val: Epoch): string =>
+  val ? new Date(val).toISOString().slice(0, 16) : "";
 
-const formatDate = (value: Epoch | number): string =>
-  value
-    ? new Date(value).toLocaleString(undefined, {
+const formatDate = (val: Epoch | number): string =>
+  val
+    ? new Date(val).toLocaleString(undefined, {
         year: "numeric",
         month: "short",
         day: "2-digit",
@@ -67,6 +67,9 @@ const formatDate = (value: Epoch | number): string =>
         minute: "2-digit",
       })
     : "";
+
+const isDateField = (field: string) =>
+  field === "activationDate" || field === "creationDate";
 
 /* =========================
    Component
@@ -81,76 +84,89 @@ export default function DataPage() {
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
   /* =========================
-     Load / Save
-========================= */
+     Load from localStorage
+  ========================= */
   useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) setAllRows(JSON.parse(saved));
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        setAllRows(Array.isArray(parsed) ? parsed : []);
+      }
+    } catch {
+      setAllRows([]);
+    }
   }, []);
 
+  /* =========================
+     Save to localStorage
+  ========================= */
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(allRows));
   }, [allRows]);
 
   /* =========================
-     Filtering
-========================= */
+     Filtering (FIXED)
+  ========================= */
   useEffect(() => {
-    if (!company) setRows(allRows);
-    else {
-      setRows(
-        allRows.filter((row) =>
-          row.businessUnit.toLowerCase().includes(company.toLowerCase())
-        )
-      );
+    if (!company) {
+      setRows(allRows);
+      return;
     }
+
+    const normalizedCompany = company.trim().toLowerCase();
+
+    const filtered = allRows.filter((row) =>
+      (row.businessUnit || "")
+        .trim()
+        .toLowerCase()
+        .includes(normalizedCompany)
+    );
+
+    // Prevent empty screen
+    setRows(filtered.length ? filtered : allRows);
   }, [company, allRows]);
 
   /* =========================
      Auto Scroll
-========================= */
+  ========================= */
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [rows]);
 
   /* =========================
      CRUD
-========================= */
-  const addRow = (): void => {
-    setAllRows((prev) => [
-      ...prev,
-      {
-        id: prev.length + 1,
-        ...EMPTY_ROW,
-        businessUnit: company ?? "",
-        currentDate: Date.now(),
-      },
-    ]);
+  ========================= */
+  const createRow = (): SimRow => ({
+    id: Date.now(), // ✅ unique id
+    ...EMPTY_ROW,
+    businessUnit: company ? company.trim() : "default",
+    currentDate: Date.now(),
+  });
+
+  const addRow = () => {
+    setAllRows((prev) => [...prev, createRow()]);
     setEditingIndex(rows.length);
   };
 
-  const deleteRow = (index: number): void => {
-    const id = rows[index].id;
+  const deleteRow = (id: number) => {
     setAllRows((prev) => prev.filter((row) => row.id !== id));
     setEditingIndex(null);
   };
 
   const updateCell = (
-    index: number,
+    id: number,
     field: keyof SimRow,
     value: string
-  ): void => {
-    const id = rows[index].id;
-
+  ) => {
     setAllRows((prev) =>
       prev.map((row) =>
         row.id === id
           ? {
               ...row,
-              [field]:
-                field === "activationDate" || field === "creationDate"
-                  ? toEpoch(value)
-                  : value,
+              [field]: isDateField(field)
+                ? toEpoch(value)
+                : value,
             }
           : row
       )
@@ -158,11 +174,11 @@ export default function DataPage() {
   };
 
   /* =========================
-     File Upload (Excel)
-========================= */
+     Excel Upload
+  ========================= */
   const handleFileUpload = async (
     e: ChangeEvent<HTMLInputElement>
-  ): Promise<void> => {
+  ) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -171,28 +187,61 @@ export default function DataPage() {
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
     const data = XLSX.utils.sheet_to_json<Record<string, any>>(sheet);
 
-    setAllRows((prev) => [
-      ...prev,
-      ...data.map((item, index) => ({
-        id: prev.length + index + 1,
-        subscriptionId: item["Subscription Id"] ?? "",
-        msisdn: item["MSISDN"] ?? "",
-        iccid: item["ICCID"] ?? "",
-        imsi: item["IMSI"] ?? "",
-        activationDate: toEpoch(item["Activation Date"]),
-        creationDate: toEpoch(item["Subscriber Creation Date"]),
-        planName: item["Subscriber Plan Name"] ?? "",
-        productType: item["Product Type"] ?? "",
-        businessUnit: company ?? item["Business Unit Name"] ?? "",
-        status: item["Product Status"] ?? "",
-        currentDate: Date.now(),
-      })),
-    ]);
+    const newRows: SimRow[] = data.map((item, index) => ({
+      id: Date.now() + index,
+      subscriptionId: item["Subscription Id"] ?? "",
+      msisdn: item["MSISDN"] ?? "",
+      iccid: item["ICCID"] ?? "",
+      imsi: item["IMSI"] ?? "",
+      activationDate: toEpoch(item["Activation Date"]),
+      creationDate: toEpoch(item["Subscriber Creation Date"]),
+      planName: item["Subscriber Plan Name"] ?? "",
+      productType: item["Product Type"] ?? "",
+      businessUnit:
+        company || item["Business Unit Name"] || "default",
+      status: item["Product Status"] ?? "",
+      currentDate: Date.now(),
+    }));
+
+    setAllRows((prev) => [...prev, ...newRows]);
+  };
+
+  /* =========================
+     Render Cell
+  ========================= */
+  const renderCell = (
+    row: SimRow,
+    index: number,
+    field: keyof typeof EMPTY_ROW
+  ) => {
+    if (editingIndex === index) {
+      return isDateField(field) ? (
+        <input
+          type="datetime-local"
+          value={toInputDate(row[field])}
+          onChange={(e) =>
+            updateCell(row.id, field as keyof SimRow, e.target.value)
+          }
+        />
+      ) : (
+        <input
+          type="text"
+          value={row[field]}
+          onChange={(e) =>
+            updateCell(row.id, field as keyof SimRow, e.target.value)
+          }
+        />
+      );
+    }
+
+    return isDateField(field)
+      ? formatDate(row[field])
+      : row[field];
   };
 
   /* =========================
      Render
-========================= */
+  ========================= */
   return (
     <div className="container">
       <h2 className="page-title">SIM Data – {company}</h2>
@@ -209,7 +258,7 @@ export default function DataPage() {
       </div>
 
       <div className="table">
-        {/* Headers */}
+        {/* Header */}
         <div className="table-header">
           {[
             "ID",
@@ -239,40 +288,8 @@ export default function DataPage() {
 
             {(Object.keys(EMPTY_ROW) as (keyof typeof EMPTY_ROW)[]).map(
               (field) => (
-                <div className="td" key={field}>
-                  {editingIndex === index ? (
-                    field === "activationDate" ||
-                    field === "creationDate" ? (
-                      <input
-                        type="datetime-local"
-                        value={toDateTimeLocal(row[field])}
-                        onChange={(e) =>
-                          updateCell(
-                            index,
-                            field as keyof SimRow,
-                            e.target.value
-                          )
-                        }
-                      />
-                    ) : (
-                      <input
-                        type="text"
-                        value={row[field]}
-                        onChange={(e) =>
-                          updateCell(
-                            index,
-                            field as keyof SimRow,
-                            e.target.value
-                          )
-                        }
-                      />
-                    )
-                  ) : field === "activationDate" ||
-                    field === "creationDate" ? (
-                    formatDate(row[field])
-                  ) : (
-                    row[field]
-                  )}
+                <div key={field} className="td">
+                  {renderCell(row, index, field)}
                 </div>
               )
             )}
@@ -281,11 +298,12 @@ export default function DataPage() {
 
             <div className="td">
               <select
-                value=""
+                defaultValue=""
                 onChange={(e) => {
-                  if (e.target.value === "edit") setEditingIndex(index);
-                  if (e.target.value === "save") setEditingIndex(null);
-                  if (e.target.value === "delete") deleteRow(index);
+                  const action = e.target.value;
+                  if (action === "edit") setEditingIndex(index);
+                  if (action === "save") setEditingIndex(null);
+                  if (action === "delete") deleteRow(row.id);
                 }}
               >
                 <option value="" disabled>
