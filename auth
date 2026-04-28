@@ -1,14 +1,24 @@
 import type { Configuration } from "@azure/msal-browser";
 
+/* =========================
+   MSAL CONFIGURATION
+========================= */
 export const msalConfig: Configuration = {
   auth: {
-    clientId: "e78f3d76-3d3a-4ca0-b490-b4c9ea4ef974",
-    authority: "https://login.microsoftonline.com/d30feff3-78f9-476a-81e4-c71b80743988",
-    redirectUri: "http://localhost:5173",
+    clientId: "YOUR_CLIENT_ID", // from Azure
+    authority: "https://login.microsoftonline.com/YOUR_TENANT_ID",
+    redirectUri: "http://localhost:5173", // must match Azure EXACTLY
   },
+
   cache: {
-    cacheLocation: "localStorage",
+    cacheLocation: "localStorage", // keeps user logged in
+    storeAuthStateInCookie: false,
   },
 };
 
-export const loginRequest = {};
+/* =========================
+   LOGIN REQUEST (REQUIRED)
+========================= */
+export const loginRequest = {
+  scopes: ["User.Read"], // permission to read user profile
+};
