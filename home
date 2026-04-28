@@ -1,0 +1,213 @@
+import { Link } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { useMsal } from "@azure/msal-react";
+import DashboardLayout from "../layouts/dashboardlayout";
+import "../styles/home.css";
+
+interface CompanyCount {
+  name: string;
+  sims: number;
+}
+
+export default function Home() {
+  const { accounts } = useMsal();
+
+  // ✅ Microsoft authenticated user
+  const username = accounts[0]?.username || "User";
+
+  const [companies, setCompanies] = useState<CompanyCount[]>([]);
+  const [showModal, setShowModal] = useState(false);
+  const [newCompany, setNewCompany] = useState("");
+  const [companyToDelete, setCompanyToDelete] = useState<string | null>(null);
+  const [openMenu, setOpenMenu] = useState<string | null>(null);
+
+  /* =========================
+     LOAD & SYNC COMPANIES
+  ========================= */
+  const updateCompanies = () => {
+    const storedRows = JSON.parse(localStorage.getItem("simData") || "[]");
+    const storedCompanies = JSON.parse(
+      localStorage.getItem("companies") || "[]"
+    );
+
+    const companyMap: Record<string, number> = {};
+
+    storedRows.forEach((row: any) => {
+      if (!row.businessUnit) return;
+      const name = row.businessUnit.trim();
+      companyMap[name] = (companyMap[name] || 0) + 1;
+    });
+
+    storedCompanies.forEach((name: string) => {
+      if (!(name in companyMap)) {
+        companyMap[name] = 0;
+      }
+    });
+
+    setCompanies(
+      Object.entries(companyMap).map(([name, sims]) => ({
+        name,
+        sims,
+      }))
+    );
+  };
+
+  useEffect(() => {
+    updateCompanies();
+    window.addEventListener("storage", updateCompanies);
+    return () => window.removeEventListener("storage", updateCompanies);
+  }, []);
+
+  /* =========================
+     ADD COMPANY
+  ========================= */
+  const handleAddCompany = () => {
+    if (!newCompany.trim()) return;
+
+    const stored =
+      JSON.parse(localStorage.getItem("companies") || "[]") as string[];
+
+    if (!stored.includes(newCompany)) {
+      stored.push(newCompany);
+      localStorage.setItem("companies", JSON.stringify(stored));
+    }
+
+    setNewCompany("");
+    setShowModal(false);
+    updateCompanies();
+    window.dispatchEvent(new Event("storage"));
+  };
+
+  /* =========================
+     DELETE COMPANY
+  ========================= */
+  const handleDeleteCompany = () => {
+    if (!companyToDelete) return;
+
+    const updatedCompanies = (
+      JSON.parse(localStorage.getItem("companies") || "[]") as string[]
+    ).filter((c) => c !== companyToDelete);
+
+    localStorage.setItem("companies", JSON.stringify(updatedCompanies));
+
+    const updatedSimData = (
+      JSON.parse(localStorage.getItem("simData") || "[]") as any[]
+    ).filter((row) => row.businessUnit !== companyToDelete);
+
+    localStorage.setItem("simData", JSON.stringify(updatedSimData));
+
+    setCompanyToDelete(null);
+    updateCompanies();
+    window.dispatchEvent(new Event("storage"));
+  };
+
+  return (
+    <DashboardLayout>
+      <header className="home-header">
+        <h1>
+          Welcome back, <span>{username}</span>!
+        </h1>
+      </header>
+
+      <section className="cards">
+        {companies.map((company) => (
+          <div key={company.name} className="card-wrapper">
+            <Link
+              to={`/data/${company.name}`}
+              className="card-link"
+              onClick={() => setOpenMenu(null)}
+            >
+              <div className="card">
+                <h3>{company.name}</h3>
+                <p>Count: {company.sims}</p>
+              </div>
+            </Link>
+
+            {/* 3 DOT MENU */}
+            <button
+              className="menu-btn"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setOpenMenu(
+                  openMenu === company.name ? null : company.name
+                );
+              }}
+            >
+              ⋮
+            </button>
+
+            {openMenu === company.name && (
+              <div className="menu-content">
+                <button
+                  onClick={() => {
+                    setCompanyToDelete(company.name);
+                    setOpenMenu(null);
+                  }}
+                >
+                  Delete
+                </button>
+              </div>
+            )}
+          </div>
+        ))}
+
+        {/* ADD COMPANY CARD */}
+        <div
+          className="card add-card"
+          onClick={() => setShowModal(true)}
+        >
+          <h2>+</h2>
+          <p>Add Company</p>
+        </div>
+      </section>
+
+      {/* ADD COMPANY MODAL */}
+      {showModal && (
+        <div className="modal-overlay">
+          <div className="modal">
+            <h3>Add New Company</h3>
+            <input
+              type="text"
+              placeholder="Enter company name"
+              value={newCompany}
+              onChange={(e) => setNewCompany(e.target.value)}
+            />
+            <div className="modal-actions">
+              <button onClick={() => setShowModal(false)}>
+                Cancel
+              </button>
+              <button className="primary" onClick={handleAddCompany}>
+                Add
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* DELETE CONFIRMATION MODAL */}
+      {companyToDelete && (
+        <div className="modal-overlay">
+          <div className="modal">
+            <h3>Delete Company</h3>
+            <p>
+              Are you sure you want to delete{" "}
+              <strong>{companyToDelete}</strong> and all its SIM data?
+            </p>
+            <div className="modal-actions">
+              <button onClick={() => setCompanyToDelete(null)}>
+                Cancel
+              </button>
+              <button className="danger" onClick={handleDeleteCompany}>
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </DashboardLayout>
+  );
+}
+
+
+
