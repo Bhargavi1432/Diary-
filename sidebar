@@ -15,12 +15,17 @@ export default function Sidebar() {
   const location = useLocation();
   const { instance } = useMsal();
 
-  const handleLogout = () => {
-    // ✅ clear app-level state
-    localStorage.clear();
+  const handleLogout = async () => {
+    // ✅ CLEAR ONLY AUTH STATE (IMPORTANT)
+    localStorage.removeItem("isLoggedIn");
+    localStorage.removeItem("currentUser");
+    localStorage.removeItem("username");
 
-    // ✅ MSAL logout + redirect to login page
-    instance.logoutRedirect({
+    // ❌ DO NOT clear simData / companies / users
+    // ❌ localStorage.clear();  <-- REMOVED
+
+    // ✅ MICROSOFT LOGOUT + REDIRECT TO LOGIN
+    await instance.logoutRedirect({
       postLogoutRedirectUri: "/",
     });
   };
